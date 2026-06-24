@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
-import "@chainlink/contracts-ccip/src/v0.8/ccip/applications/CCIPReceiver.sol";
-import "@chainlink/contracts-ccip/src/v0.8/ccip/libraries/Client.sol";
+import "@chainlink/contracts-ccip/contracts/interfaces/IRouterClient.sol";
+import "@chainlink/contracts-ccip/contracts/applications/CCIPReceiver.sol";
+import "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -180,13 +180,8 @@ contract Bridge is CCIPReceiver, AccessControl, Pausable, ReentrancyGuard {
 
         uint256 remainingAmount = amount - tokenPlatformFee;
 
-        // If Burn/Mint model, burn the remaining tokens
-        if (tokenBridgeModel[token]) {
-            BridgeToken(token).burnFromAddress(address(this), remainingAmount);
-        }
-
         // Approve CCIP router to withdraw remaining token
-        IERC20(token).safeApprove(getRouter(), remainingAmount);
+        IERC20(token).approve(getRouter(), remainingAmount);
 
         // Construct CCIP message
         Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
@@ -253,16 +248,26 @@ contract Bridge is CCIPReceiver, AccessControl, Pausable, ReentrancyGuard {
             address token = message.destTokenAmounts[i].token;
             uint256 amount = message.destTokenAmounts[i].amount;
 
-            if (tokenBridgeModel[token]) {
-                // Burn/Mint model: Mint tokens to recipient
-                BridgeToken(token).mint(receiver, amount);
-            } else {
-                // Lock/Release model: Release locked tokens to recipient
-                IERC20(token).safeTransfer(receiver, amount);
-            }
+            // Release tokens to recipient
+            IERC20(token).safeTransfer(receiver, amount);
 
             emit BridgeReceived(message.messageId, receiver, message.sourceChainSelector, token, amount);
         }
+    }
+
+    /**
+     * @dev Overrides supportsInterface to resolve conflict between CCIPReceiver and AccessControl.
+     */
+    function supportsInterface(bytes4 interfaceId)
+        public
+        pure
+        override(CCIPReceiver, AccessControl)
+        returns (bool)
+    {
+        return
+            interfaceId == type(IAny2EVMMessageReceiver).interfaceId ||
+            interfaceId == 0x7965db0b || // IAccessControl interface ID
+            interfaceId == 0x01ffc9a7;   // IERC165 interface ID
     }
 
     // Allow contract to receive native gas

@@ -1,0 +1,4 @@
+@openzeppelin/contracts@5.0.2/=@openzeppelin/contracts/
+@openzeppelin/contracts@4.8.3/=@openzeppelin/contracts/
+@openzeppelin/contracts-5.0.2/=@openzeppelin/contracts/
+@openzeppelin/contracts-4.8.3/=@openzeppelin/contracts/
