@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { NETWORKS } from "../lib/constants";
+import { NETWORKS } from "../../lib/constants";
 import { BarChart3, TrendingUp, CheckCircle, Clock, RefreshCw, Layers } from "lucide-react";
 
 interface DashboardStats {

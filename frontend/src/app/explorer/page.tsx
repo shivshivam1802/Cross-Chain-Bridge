@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { NETWORKS } from "../lib/constants";
+import { NETWORKS } from "../../lib/constants";
 import { Search, Loader2, ArrowRight, CheckCircle, Clock, XCircle, ExternalLink, Calendar } from "lucide-react";
 
 interface Transaction {
