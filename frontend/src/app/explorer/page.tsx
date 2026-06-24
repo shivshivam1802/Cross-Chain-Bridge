@@ -33,11 +33,19 @@ export default function ExplorerPage() {
 
   const fetchRecentTransactions = async () => {
     try {
-      const res = await fetch(`${backendUrl}/transactions?limit=10`);
-      const result = await res.json();
-      if (result.success) {
-        setRecentTransactions(result.data);
+      let backendTxs: Transaction[] = [];
+      try {
+        const res = await fetch(`${backendUrl}/transactions?limit=10`);
+        const result = await res.json();
+        if (result.success) {
+          backendTxs = result.data;
+        }
+      } catch (err) {
+        console.error("Failed to fetch recent transactions from backend:", err);
       }
+
+      const mockTxs = JSON.parse(localStorage.getItem("mock_transactions") || "[]");
+      setRecentTransactions([...mockTxs, ...backendTxs].slice(0, 10));
     } catch (err) {
       console.error("Failed to fetch recent transactions:", err);
     }
@@ -57,28 +65,63 @@ export default function ExplorerPage() {
     setSearchedUserTxs([]);
 
     try {
+      const queryVal = searchQuery.trim();
       // Check if it looks like a wallet address
-      if (searchQuery.startsWith("0x") && searchQuery.length === 42) {
-        const res = await fetch(`${backendUrl}/transactions?wallet=${searchQuery.trim()}`);
-        const result = await res.json();
-        if (result.success && result.data.length > 0) {
-          setSearchedUserTxs(result.data);
+      if (queryVal.startsWith("0x") && queryVal.length === 42) {
+        const mockTxs = JSON.parse(localStorage.getItem("mock_transactions") || "[]");
+        const matchingMockTxs = mockTxs.filter(
+          (tx: any) =>
+            tx.sender.toLowerCase() === queryVal.toLowerCase() ||
+            tx.receiver.toLowerCase() === queryVal.toLowerCase()
+        );
+
+        let backendTxs: Transaction[] = [];
+        try {
+          const res = await fetch(`${backendUrl}/transactions?wallet=${queryVal}`);
+          const result = await res.json();
+          if (result.success) {
+            backendTxs = result.data;
+          }
+        } catch (err) {
+          console.error("Backend wallet search failed:", err);
+        }
+
+        const combined = [...matchingMockTxs, ...backendTxs];
+        if (combined.length > 0) {
+          setSearchedUserTxs(combined);
         } else {
           setError("No transactions found for this wallet address.");
         }
       } else {
         // Query as transaction hash or message ID
-        const res = await fetch(`${backendUrl}/transactions/${searchQuery.trim()}`);
-        const result = await res.json();
-        if (result.success && result.data) {
-          setSearchedTx(result.data);
+        const mockTxs = JSON.parse(localStorage.getItem("mock_transactions") || "[]");
+        const matchingMockTx = mockTxs.find(
+          (tx: any) =>
+            tx.sourceTxHash.toLowerCase() === queryVal.toLowerCase() ||
+            tx.destTxHash.toLowerCase() === queryVal.toLowerCase() ||
+            tx.messageId.toLowerCase() === queryVal.toLowerCase()
+        );
+
+        if (matchingMockTx) {
+          setSearchedTx(matchingMockTx);
         } else {
-          setError("Transaction hash or CCIP Message ID not found.");
+          try {
+            const res = await fetch(`${backendUrl}/transactions/${queryVal}`);
+            const result = await res.json();
+            if (result.success && result.data) {
+              setSearchedTx(result.data);
+            } else {
+              setError("Transaction hash or CCIP Message ID not found.");
+            }
+          } catch (err) {
+            console.error("Backend tx search failed:", err);
+            setError("Transaction not found. Make sure the backend is active.");
+          }
         }
       }
     } catch (err) {
       console.error("Search failed:", err);
-      setError("An error occurred during search. Please make sure the backend is active.");
+      setError("An error occurred during search.");
     } finally {
       setLoading(false);
     }

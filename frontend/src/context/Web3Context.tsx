@@ -6,7 +6,7 @@ import { ethers } from "ethers";
 
 interface Web3ContextType {
   state: Web3State;
-  connectWallet: () => Promise<void>;
+  connectWallet: (walletType?: string) => Promise<void>;
   disconnectWallet: () => void;
   switchNetwork: (targetChainId: number) => Promise<boolean>;
   getTokenBalance: (tokenAddress: string, walletAddress: string) => Promise<string>;
@@ -14,6 +14,14 @@ interface Web3ContextType {
   approveToken: (tokenAddress: string, spenderAddress: string, amount: string) => Promise<ethers.TransactionResponse | null>;
   executeBridge: (bridgeAddress: string, destChainSelector: string, tokenAddress: string, amount: string, receiver: string, totalNativeFee: string) => Promise<ethers.TransactionResponse | null>;
   estimateFees: (bridgeAddress: string, destChainSelector: string, tokenAddress: string, amount: string) => Promise<{ platformFlatFee: string; ccipFee: string; tokenPlatformFee: string } | null>;
+  
+  // Modal states
+  isModalOpen: boolean;
+  setIsModalOpen: (open: boolean) => void;
+  modalView: "SELECT" | "QR_CODE" | "CONNECTING";
+  setModalView: (view: "SELECT" | "QR_CODE" | "CONNECTING") => void;
+  selectedWalletName: string;
+  setSelectedWalletName: (name: string) => void;
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined);

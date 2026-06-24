@@ -107,6 +107,30 @@ export default function BridgePage() {
 
     const interval = setInterval(async () => {
       try {
+        if (bridgeTxHash.startsWith("0xmock")) {
+          // Retrieve from local storage
+          const mockTxs = JSON.parse(localStorage.getItem("mock_transactions") || "[]");
+          const tx = mockTxs.find((t: any) => t.sourceTxHash === bridgeTxHash);
+          if (tx) {
+            const elapsed = Date.now() - new Date(tx.createdAt).getTime();
+            if (elapsed > 12000) { // 12 seconds
+              tx.status = "COMPLETED";
+              tx.destTxHash = "0xmockdest" + tx.sourceTxHash.slice(8);
+              tx.updatedAt = new Date().toISOString();
+              localStorage.setItem("mock_transactions", JSON.stringify(mockTxs));
+              
+              setBridgeStatus("COMPLETED");
+              setStatusMessage("Transaction delivered successfully to the target chain!");
+              clearInterval(interval);
+              fetchBalancesAndAllowances();
+            } else {
+              setBridgeStatus("ROUTING");
+              setStatusMessage("CCIP routing transaction... target confirmation pending.");
+            }
+          }
+          return;
+        }
+
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"}/transactions/${bridgeTxHash}`);
         const result = await res.json();
         
@@ -338,7 +362,7 @@ export default function BridgePage() {
             {/* Buttons */}
             {!state.isConnected ? (
               <button
-                onClick={connectWallet}
+                onClick={() => connectWallet()}
                 className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 py-3 text-xs font-bold text-white shadow-lg transition duration-300 hover:from-violet-500 hover:to-indigo-500"
               >
                 Connect Wallet to Bridge

@@ -53,19 +53,74 @@ export default function DashboardPage() {
     setLoading(true);
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
     try {
-      // Fetch stats
-      const statsRes = await fetch(`${backendUrl}/stats`);
-      const statsResult = await statsRes.json();
-      if (statsResult.success) {
-        setStats(statsResult.data);
+      let backendStats: DashboardStats | null = null;
+      try {
+        const statsRes = await fetch(`${backendUrl}/stats`);
+        const statsResult = await statsRes.json();
+        if (statsResult.success) {
+          backendStats = statsResult.data;
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard stats from backend:", err);
       }
 
-      // Fetch transaction history
-      const txRes = await fetch(`${backendUrl}/transactions?limit=6`);
-      const txResult = await txRes.json();
-      if (txResult.success) {
-        setTransactions(txResult.data);
+      let backendTxs: Transaction[] = [];
+      try {
+        const txRes = await fetch(`${backendUrl}/transactions?limit=6`);
+        const txResult = await txRes.json();
+        if (txResult.success) {
+          backendTxs = txResult.data;
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard transactions from backend:", err);
       }
+
+      const mockTxs = JSON.parse(localStorage.getItem("mock_transactions") || "[]");
+      const combinedTxs = [...mockTxs, ...backendTxs].slice(0, 6);
+      setTransactions(combinedTxs);
+
+      const initialStats: DashboardStats = backendStats || {
+        statusCounts: { pending: 0, completed: 0, failed: 0, total: 0 },
+        tokenVolume: [{ symbol: "CCT", volume: "0", txCount: 0 }],
+        dailyStats: [],
+        routeStats: []
+      };
+
+      const mockCompleted = mockTxs.filter((t: any) => t.status === "COMPLETED").length;
+      const mockPending = mockTxs.filter((t: any) => t.status === "ROUTING" || t.status === "PENDING").length;
+      const mockFailed = mockTxs.filter((t: any) => t.status === "FAILED").length;
+      const mockTotal = mockTxs.length;
+
+      initialStats.statusCounts.completed += mockCompleted;
+      initialStats.statusCounts.pending += mockPending;
+      initialStats.statusCounts.failed += mockFailed;
+      initialStats.statusCounts.total += mockTotal;
+
+      let mockVolWei = 0n;
+      mockTxs.forEach((t: any) => {
+        if (t.status === "COMPLETED") {
+          try {
+            mockVolWei += BigInt(t.amount);
+          } catch (e) {
+            // fallback if amount is in ethers instead of wei
+            mockVolWei += BigInt(Math.floor(Number(t.amount) * 1e18));
+          }
+        }
+      });
+
+      const cctVolumeEntry = initialStats.tokenVolume.find(v => v.symbol === "CCT");
+      if (cctVolumeEntry) {
+        cctVolumeEntry.volume = (BigInt(cctVolumeEntry.volume) + mockVolWei).toString();
+        cctVolumeEntry.txCount += mockCompleted;
+      } else {
+        initialStats.tokenVolume.push({
+          symbol: "CCT",
+          volume: mockVolWei.toString(),
+          txCount: mockCompleted
+        });
+      }
+
+      setStats(initialStats);
     } catch (err) {
       console.error("Failed to load dashboard data:", err);
     } finally {

@@ -5,16 +5,22 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWeb3Context } from "../context/Web3Context";
 import { NETWORKS } from "../lib/constants";
-import { Wallet, ChevronDown, CheckCircle2, X, AlertCircle, Loader2, Activity } from "lucide-react";
+import { Wallet, ChevronDown, CheckCircle2, X, AlertCircle, Loader2, Activity, ShieldCheck } from "lucide-react";
 
 export const Header = () => {
   const pathname = usePathname();
-  const { state, connectWallet, disconnectWallet, switchNetwork } = useWeb3Context();
-  
-  // Wallet Selection Modal State
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [modalView, setModalView] = useState<"SELECT" | "QR_CODE" | "CONNECTING">("SELECT");
-  const [selectedWalletName, setSelectedWalletName] = useState<string>("");
+  const {
+    state,
+    connectWallet,
+    disconnectWallet,
+    switchNetwork,
+    isModalOpen,
+    setIsModalOpen,
+    modalView,
+    setModalView,
+    selectedWalletName,
+    setSelectedWalletName
+  } = useWeb3Context();
 
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -42,8 +48,7 @@ export const Header = () => {
     setModalView("CONNECTING");
     setSelectedWalletName("MetaMask");
     try {
-      await connectWallet();
-      handleCloseModal();
+      await connectWallet("MetaMask");
     } catch (err) {
       setModalView("SELECT");
     }
@@ -56,8 +61,7 @@ export const Header = () => {
     // Simulate QR code scan success after 4 seconds
     setTimeout(async () => {
       try {
-        await connectWallet();
-        handleCloseModal();
+        await connectWallet("WalletConnect");
       } catch (err) {
         setModalView("SELECT");
       }
@@ -71,12 +75,21 @@ export const Header = () => {
     // Simulate connection
     setTimeout(async () => {
       try {
-        await connectWallet();
-        handleCloseModal();
+        await connectWallet("Coinbase");
       } catch (err) {
         setModalView("SELECT");
       }
     }, 2000);
+  };
+
+  const handleSelectSandbox = async () => {
+    setModalView("CONNECTING");
+    setSelectedWalletName("Sandbox Wallet");
+    try {
+      await connectWallet("MockSandbox");
+    } catch (err) {
+      setModalView("SELECT");
+    }
   };
 
   return (
@@ -236,6 +249,21 @@ export const Header = () => {
                       </div>
                       <span>Coinbase Wallet</span>
                     </div>
+                  </button>
+
+                  {/* Sandbox Wallet (Dev Mode) */}
+                  <button
+                    onClick={handleSelectSandbox}
+                    className="flex w-full items-center justify-between rounded-xl border border-violet-500/30 bg-violet-950/20 p-3 text-xs font-bold text-slate-200 transition hover:bg-violet-950/30 hover:border-violet-500/50 text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ShieldCheck className="h-6 w-6 text-violet-400" />
+                      <div>
+                        <span className="block text-slate-200">Sandbox Wallet</span>
+                        <span className="block text-[9px] text-slate-400 font-normal">Instant connection for testing</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-emerald-400 font-semibold uppercase">Dev Mode</span>
                   </button>
                 </div>
               </div>

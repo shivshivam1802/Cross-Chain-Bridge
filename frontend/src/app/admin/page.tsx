@@ -31,6 +31,27 @@ export default function AdminPage() {
 
   // Helper to get contracts
   const getContracts = async (chainId: number) => {
+    if (state.isMockWallet) {
+      const fakeWaitTx = () => ({
+        wait: async () => {
+          await new Promise(resolve => setTimeout(resolve, 800));
+          return { status: 1 };
+        }
+      });
+      return {
+        bridge: {
+          pause: async () => fakeWaitTx(),
+          unpause: async () => fakeWaitTx(),
+          setPeerBridge: async () => fakeWaitTx(),
+          setTokenStatus: async () => fakeWaitTx(),
+        },
+        feeManager: {
+          setFlatNativeFee: async () => fakeWaitTx(),
+          setPercentageFeeBps: async () => fakeWaitTx(),
+        }
+      } as any;
+    }
+
     if (!state.signer) throw new Error("Wallet not connected");
     const netConfig = NETWORKS[chainId];
     if (!netConfig) throw new Error("Invalid network");
@@ -117,15 +138,27 @@ export default function AdminPage() {
 
   const handleRegisterTokenInDb = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!state.signer || !tokenAddress || !tokenSymbol || !tokenName) return;
+    if ((!state.signer && !state.isMockWallet) || !tokenAddress || !tokenSymbol || !tokenName) return;
 
     setLoading(true);
     setAdminStatus("Generating EIP-191 signature verification message...");
 
     try {
+      if (state.isMockWallet) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setAdminStatus("Submitting signed request to database (Sandbox Mode)...");
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setAdminStatus("Token registered successfully in database (Simulated)!");
+        setTokenAddress("");
+        setTokenSymbol("");
+        setTokenName("");
+        setLoading(false);
+        return;
+      }
+
       const timestamp = Math.floor(Date.now() / 1000);
       const message = `Bridge Admin Action: Add Token ${tokenAddress.toLowerCase()} on Chain ${tokenChainId} at Timestamp ${timestamp}`;
-      const signature = await state.signer.signMessage(message);
+      const signature = await state.signer!.signMessage(message);
 
       setAdminStatus("Submitting signed request to backend API...");
 

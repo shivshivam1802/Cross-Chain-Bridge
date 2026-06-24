@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 import { NETWORKS, TOKENS, BRIDGE_ABI, TOKEN_ABI, NetworkConfig } from "../lib/constants";
@@ -12,6 +11,7 @@ export interface Web3State {
   isConnected: boolean;
   isConnecting: boolean;
   error: string | null;
+  isMockWallet?: boolean;
 }
 
 export const useWeb3 = () => {
@@ -22,20 +22,50 @@ export const useWeb3 = () => {
     chainId: null,
     isConnected: false,
     isConnecting: false,
-    error: null
+    error: null,
+    isMockWallet: false
   });
 
-  const connectWallet = useCallback(async () => {
-    if (typeof window === "undefined" || !window.ethereum) {
-      setState(prev => ({ ...prev, error: "Please install MetaMask or another supported Web3 wallet." }));
+  // Modal States
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [modalView, setModalView] = useState<"SELECT" | "QR_CODE" | "CONNECTING">("SELECT");
+  const [selectedWalletName, setSelectedWalletName] = useState<string>("");
+
+  const connectWallet = useCallback(async (walletType?: string) => {
+    // If no walletType is specified, open the selection modal
+    if (!walletType) {
+      setModalView("SELECT");
+      setIsModalOpen(true);
       return;
     }
 
     setState(prev => ({ ...prev, isConnecting: true, error: null }));
 
+    if (walletType === "MockSandbox") {
+      // Simulate connection delay
+      await new Promise(resolve => setTimeout(resolve, 600));
+      setState({
+        provider: null,
+        signer: null,
+        address: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        chainId: 11155111, // Sepolia initially
+        isConnected: true,
+        isConnecting: false,
+        error: null,
+        isMockWallet: true
+      });
+      setIsModalOpen(false);
+      return;
+    }
+
+    if (typeof window === "undefined" || !window.ethereum) {
+      setState(prev => ({ ...prev, isConnecting: false, error: "Please install MetaMask or another supported Web3 wallet." }));
+      setIsModalOpen(false);
+      return;
+    }
+
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-      // Request accounts
       const accounts = await provider.send("eth_requestAccounts", []);
       const signer = await provider.getSigner();
       const network = await provider.getNetwork();
@@ -48,8 +78,10 @@ export const useWeb3 = () => {
         chainId,
         isConnected: true,
         isConnecting: false,
-        error: null
+        error: null,
+        isMockWallet: false
       });
+      setIsModalOpen(false);
     } catch (err: any) {
       console.error("Wallet connection error:", err);
       setState(prev => ({
@@ -57,6 +89,7 @@ export const useWeb3 = () => {
         isConnecting: false,
         error: err.message || "Failed to connect wallet"
       }));
+      setIsModalOpen(false);
     }
   }, []);
 
@@ -68,7 +101,8 @@ export const useWeb3 = () => {
       chainId: null,
       isConnected: false,
       isConnecting: false,
-      error: null
+      error: null,
+      isMockWallet: false
     });
   }, []);
 
@@ -77,6 +111,7 @@ export const useWeb3 = () => {
     if (typeof window === "undefined" || !window.ethereum) return;
 
     const handleAccountsChanged = async (accounts: string[]) => {
+      if (state.isMockWallet) return;
       if (accounts.length === 0) {
         disconnectWallet();
       } else if (state.provider) {
@@ -86,9 +121,9 @@ export const useWeb3 = () => {
     };
 
     const handleChainChanged = (hexChainId: string) => {
+      if (state.isMockWallet) return;
       const chainId = parseInt(hexChainId, 16);
       setState(prev => ({ ...prev, chainId }));
-      // Reload is standard to clear old states
       window.location.reload();
     };
 
@@ -101,10 +136,15 @@ export const useWeb3 = () => {
         window.ethereum.removeListener("chainChanged", handleChainChanged);
       }
     };
-  }, [state.provider, disconnectWallet]);
+  }, [state.provider, state.isMockWallet, disconnectWallet]);
 
-  // Request MetaMask network switch
+  // Request network switch
   const switchNetwork = async (targetChainId: number): Promise<boolean> => {
+    if (state.isMockWallet) {
+      setState(prev => ({ ...prev, chainId: targetChainId }));
+      return true;
+    }
+
     if (!window.ethereum || !state.provider) return false;
     const targetNetwork = NETWORKS[targetChainId];
     if (!targetNetwork) return false;
@@ -118,7 +158,6 @@ export const useWeb3 = () => {
       });
       return true;
     } catch (switchError: any) {
-      // If network is not added to Metamask, try to add it
       if (switchError.code === 4902) {
         try {
           await window.ethereum.request({
@@ -146,6 +185,16 @@ export const useWeb3 = () => {
 
   // Check Token balance
   const getTokenBalance = async (tokenAddress: string, walletAddress: string): Promise<string> => {
+    if (state.isMockWallet) {
+      const balanceKey = `mock_balance_${walletAddress}_${tokenAddress}`;
+      let bal = localStorage.getItem(balanceKey);
+      if (bal === null) {
+        bal = "500.0";
+        localStorage.setItem(balanceKey, bal);
+      }
+      return bal;
+    }
+
     if (!state.provider) return "0";
     try {
       const contract = new ethers.Contract(tokenAddress, TOKEN_ABI, state.provider);
@@ -163,6 +212,11 @@ export const useWeb3 = () => {
     ownerAddress: string,
     spenderAddress: string
   ): Promise<string> => {
+    if (state.isMockWallet) {
+      const allowanceKey = `mock_allowance_${ownerAddress}_${spenderAddress}_${tokenAddress}`;
+      return localStorage.getItem(allowanceKey) || "0.0";
+    }
+
     if (!state.provider) return "0";
     try {
       const contract = new ethers.Contract(tokenAddress, TOKEN_ABI, state.provider);
@@ -180,6 +234,18 @@ export const useWeb3 = () => {
     spenderAddress: string,
     amount: string
   ): Promise<ethers.TransactionResponse | null> => {
+    if (state.isMockWallet) {
+      const allowanceKey = `mock_allowance_${state.address}_${spenderAddress}_${tokenAddress}`;
+      localStorage.setItem(allowanceKey, amount);
+      return {
+        hash: "0xmockapprove" + Math.random().toString(36).substring(2, 15),
+        wait: async () => {
+          await new Promise(resolve => setTimeout(resolve, 800));
+          return { status: 1 };
+        }
+      } as any;
+    }
+
     if (!state.signer) return null;
     try {
       const contract = new ethers.Contract(tokenAddress, TOKEN_ABI, state.signer);
@@ -201,13 +267,56 @@ export const useWeb3 = () => {
     receiver: string,
     totalNativeFee: string
   ): Promise<ethers.TransactionResponse | null> => {
+    if (state.isMockWallet) {
+      const balanceKey = `mock_balance_${state.address}_${tokenAddress}`;
+      const currentBal = Number(localStorage.getItem(balanceKey) || "500.0");
+      const newBal = Math.max(0, currentBal - Number(amount));
+      localStorage.setItem(balanceKey, newBal.toFixed(4));
+
+      let destChainId = 80002;
+      if (destChainSelector === "16015286601757825753") destChainId = 11155111;
+      else if (destChainSelector === "13264668187771770619") destChainId = 97;
+      else if (destChainSelector === "0") destChainId = 31337;
+
+      const sourceTxHash = "0xmocktx" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      const messageId = "0xmockmsg" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+      const newTx = {
+        id: "mock-" + Math.random().toString(36).substring(2, 9),
+        messageId,
+        sender: state.address || "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        receiver: receiver,
+        sourceChainId: (state.chainId || 11155111).toString(),
+        destChainId: destChainId.toString(),
+        tokenAddress: tokenAddress,
+        amount: ethers.parseUnits(amount, 18).toString(), // Store as string of wei to match db format
+        feeAmount: ethers.parseEther(totalNativeFee).toString(),
+        status: "ROUTING",
+        sourceTxHash,
+        destTxHash: "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const mockTxs = JSON.parse(localStorage.getItem("mock_transactions") || "[]");
+      mockTxs.unshift(newTx);
+      localStorage.setItem("mock_transactions", JSON.stringify(mockTxs));
+
+      return {
+        hash: sourceTxHash,
+        wait: async () => {
+          await new Promise(resolve => setTimeout(resolve, 800));
+          return { status: 1 };
+        }
+      } as any;
+    }
+
     if (!state.signer) return null;
     try {
       const contract = new ethers.Contract(bridgeAddress, BRIDGE_ABI, state.signer);
       const parsedAmount = ethers.parseUnits(amount, 18);
       const parsedFee = ethers.parseEther(totalNativeFee);
 
-      // Call bridge contract
       const tx = await contract.bridgeToken(
         destChainSelector,
         tokenAddress,
@@ -229,11 +338,18 @@ export const useWeb3 = () => {
     tokenAddress: string,
     amount: string
   ): Promise<{ platformFlatFee: string; ccipFee: string; tokenPlatformFee: string } | null> => {
+    if (state.isMockWallet) {
+      return {
+        platformFlatFee: "0.0015",
+        ccipFee: "0.0020",
+        tokenPlatformFee: "0.0"
+      };
+    }
+
     if (!state.provider) return null;
     try {
       const contract = new ethers.Contract(bridgeAddress, BRIDGE_ABI, state.provider);
       const parsedAmount = ethers.parseUnits(amount, 18);
-
       const fees = await contract.estimateBridgeFees(destChainSelector, tokenAddress, parsedAmount);
       return {
         platformFlatFee: ethers.formatEther(fees.platformFlatFee),
@@ -255,6 +371,12 @@ export const useWeb3 = () => {
     getTokenAllowance,
     approveToken,
     executeBridge,
-    estimateFees
+    estimateFees,
+    isModalOpen,
+    setIsModalOpen,
+    modalView,
+    setModalView,
+    selectedWalletName,
+    setSelectedWalletName
   };
 };
