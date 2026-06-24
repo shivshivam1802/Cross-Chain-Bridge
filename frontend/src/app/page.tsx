@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useWeb3Context } from "../context/Web3Context";
 import { NETWORKS, TOKENS, TokenConfig } from "../lib/constants";
-import { ArrowRightLeft, ShieldCheck, ArrowRight, Loader2, Sparkles, CheckCircle2, RefreshCw } from "lucide-react";
+import { ArrowRightLeft, ShieldCheck, ArrowRight, Loader2, Sparkles, CheckCircle2, RefreshCw, Activity } from "lucide-react";
 
 export default function BridgePage() {
   const { state, connectWallet, switchNetwork, getTokenBalance, getTokenAllowance, approveToken, executeBridge, estimateFees } = useWeb3Context();
